@@ -24,7 +24,10 @@ public class FallbackVisionExtractionService implements VisionExtractionService 
         }
 
         if (values.isEmpty()) {
-            return fixture(fileName, type);
+            // Never substitute sample shipment values for an unreadable or unsupported upload.
+            // The seeded records are for the queue demo only; new uploads need a configured
+            // vision provider or a person to enter the document data manually.
+            return new ExtractionResult(List.of(), List.of(), 1, true);
         }
 
         List<FieldValue> fields = new ArrayList<>();
@@ -45,55 +48,8 @@ public class FallbackVisionExtractionService implements VisionExtractionService 
         if (description != null) {
             lines.add(new LineValue(1, description, value(values, "hsn code", "hsn"), decimal(values, "quantity"), decimal(values, "unit price"), value(values, "currency"), decimal(values, "line total"), decimal(values, "gross weight kg"), new BigDecimal("0.90")));
         }
-        boolean unreadable = text.isBlank() && content.length < 50;
+        boolean unreadable = fields.isEmpty() && lines.isEmpty();
         return new ExtractionResult(fields, lines, 1, unreadable);
-    }
-
-    private ExtractionResult fixture(String fileName, Enums.DocumentType type) {
-        String lower = Optional.ofNullable(fileName).orElse("").toLowerCase(Locale.ROOT);
-        boolean sweden = lower.contains("24812") || lower.contains("sweden") || lower.contains("valve");
-        List<FieldValue> fields = new ArrayList<>();
-        List<LineValue> lines = new ArrayList<>();
-
-        if (sweden) {
-            addField(fields, Enums.FieldKey.exporter_name, "Exporter Name", "Company C", .95f);
-            addField(fields, Enums.FieldKey.importer_name, "Importer Name", "Company A", .95f);
-            addField(fields, Enums.FieldKey.total_packages, "Total Packages", "18", .95f);
-            addField(fields, Enums.FieldKey.gross_weight_kg, "Gross Weight (kg)", "1460", .95f);
-            if (type == Enums.DocumentType.INVOICE) {
-                addField(fields, Enums.FieldKey.invoice_total, "Invoice Total", "7650.00", .95f);
-                addField(fields, Enums.FieldKey.currency, "Currency", "EUR", .95f);
-                addField(fields, Enums.FieldKey.incoterm, "Incoterm", "CIF Nhava Sheva", .95f);
-                addField(fields, Enums.FieldKey.invoice_number, "Invoice Number", "INV-C-24812", .93f);
-                addField(fields, Enums.FieldKey.invoice_date, "Invoice Date", "2026-11-03", .92f);
-                lines.add(new LineValue(1, "Steel ball valve DN50", "84818030", new BigDecimal("180"), new BigDecimal("42.50"), "EUR", new BigDecimal("7650.00"), new BigDecimal("1460"), new BigDecimal("0.96")));
-            }
-            if (type == Enums.DocumentType.BILL_OF_LADING) {
-                addField(fields, Enums.FieldKey.container_number, "Container Number", "SEAL-C-24812", .74f);
-            }
-            return new ExtractionResult(fields, lines, 1, false);
-        }
-
-        addField(fields, Enums.FieldKey.exporter_name, "Exporter Name", "Company B", .91f);
-        addField(fields, Enums.FieldKey.importer_name, "Importer Name", "Company A", .91f);
-        addField(fields, Enums.FieldKey.total_packages, "Total Packages", "120", .95f);
-        if (type == Enums.DocumentType.INVOICE) {
-            addField(fields, Enums.FieldKey.gross_weight_kg, "Gross Weight (kg)", "3120", .92f);
-            addField(fields, Enums.FieldKey.invoice_total, "Invoice Total", "16320.00", .92f);
-            addField(fields, Enums.FieldKey.currency, "Currency", "USD", .96f);
-            addField(fields, Enums.FieldKey.incoterm, "Incoterm", "FOB Shenzhen", .78f);
-            addField(fields, Enums.FieldKey.invoice_number, "Invoice Number", "INV-B-24811", .90f);
-            addField(fields, Enums.FieldKey.invoice_date, "Invoice Date", "2026-11-04", .89f);
-            lines.add(new LineValue(1, "LED panel light 40W", "94051100", new BigDecimal("2400"), new BigDecimal("6.80"), "USD", new BigDecimal("16320.00"), new BigDecimal("3120"), new BigDecimal("0.96")));
-        } else if (type == Enums.DocumentType.PACKING_LIST) {
-            addField(fields, Enums.FieldKey.gross_weight_kg, "Gross Weight (kg)", "3165", .93f);
-            addField(fields, Enums.FieldKey.net_weight_kg, "Net Weight (kg)", "2980", .90f);
-            lines.add(new LineValue(1, "LED panel light 40W", "—", new BigDecimal("2400"), BigDecimal.ZERO, "USD", BigDecimal.ZERO, new BigDecimal("3165"), new BigDecimal("0.94")));
-        } else {
-            addField(fields, Enums.FieldKey.gross_weight_kg, "Gross Weight (kg)", "3165", .91f);
-            addField(fields, Enums.FieldKey.container_number, "Container Number", "MSCU8492014", .81f);
-        }
-        return new ExtractionResult(fields, lines, type == Enums.DocumentType.INVOICE ? 2 : 1, false);
     }
 
     private String decode(byte[] content) {

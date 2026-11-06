@@ -10,6 +10,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import java.io.IOException;
 import java.util.List;
@@ -33,6 +36,17 @@ public class ShipmentController {
     @GetMapping("/{id}")
     public ShipmentDetail get(@PathVariable Long id) {
         return queries.get(id);
+    }
+
+    @GetMapping("/documents/{documentId}/content")
+    public ResponseEntity<byte[]> documentContent(@PathVariable Long documentId) {
+        ShipmentDocument document = queries.document(documentId);
+        if (document.getFileContent() == null || document.getFileContent().length == 0) {
+            throw new com.companya.customs.exception.ApiExceptions.NotFound("Document file content is unavailable");
+        }
+        MediaType type = MediaType.APPLICATION_OCTET_STREAM;
+        try { type = MediaType.parseMediaType(document.getContentType()); } catch (Exception ignored) { }
+        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getFileName().replace("\"", "") + "\"").contentType(type).body(document.getFileContent());
     }
 
     @PostMapping

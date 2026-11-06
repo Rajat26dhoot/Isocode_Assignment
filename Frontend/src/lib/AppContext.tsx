@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, mapAuditLogs } from './api'
-import { demoAuditLogs, demoShipments, demoSuppliers } from '../data/demoData'
 import type { AuditLog, DocumentType, Role, Shipment, SupplierAccuracy } from '../types/domain'
 
 interface PendingPacket {
@@ -11,6 +10,8 @@ interface PendingPacket {
 interface AppContextValue {
   role: Role
   setRole: (role: Role) => void
+  authenticated: boolean
+  signIn: (email: string, password: string) => Promise<void>
   userName: string
   shipments: Shipment[]
   suppliers: SupplierAccuracy[]
@@ -26,16 +27,11 @@ interface AppContextValue {
   approveShipment: (shipmentId: number) => Promise<void>
   refreshShipment: (shipmentId: number) => Promise<void>
   refreshAll: () => Promise<void>
-  createShipment: (files: Partial<Record<DocumentType, File>>, unreadable: Partial<Record<DocumentType, boolean>>) => Promise<number>
+  createShipment: (files: Partial<Record<DocumentType, File>>, unreadable: Partial<Record<DocumentType, boolean>>, details: { importerName: string; supplierName: string; supplierCountry?: string; importerContact?: string }) => Promise<number>
   takePendingPacket: (shipmentId: number) => PendingPacket | null
 }
 
 const Context = createContext<AppContextValue | null>(null)
-
-const credentials: Record<Role, { email: string; password: string; name: string }> = {
-  ROLE_EXECUTIVE: { email: 'exec@companya.in', password: 'password123', name: 'Rajat Mehta' },
-  ROLE_MANAGER: { email: 'manager@companya.in', password: 'password123', name: 'Mira Shah' },
-}
 
 function normalizeShipment(raw: Shipment): Shipment {
   return {
@@ -65,13 +61,14 @@ function normalizeAccuracy(rows: SupplierAccuracy[]): SupplierAccuracy[] {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const liveApi = Boolean(import.meta.env.VITE_API_URL)
-  const [role, setRoleState] = useState<Role>('ROLE_EXECUTIVE')
-  const [userName, setUserName] = useState(credentials.ROLE_EXECUTIVE.name)
-  const [shipments, setShipments] = useState<Shipment[]>(liveApi ? [] : structuredClone(demoShipments))
-  const [suppliers, setSuppliers] = useState<SupplierAccuracy[]>(liveApi ? [] : demoSuppliers)
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(liveApi ? [] : demoAuditLogs)
-  const [loading, setLoading] = useState(liveApi)
+  const liveApi = true
+  const [role, setRoleState] = useState<Role>(api.getRole())
+  const [userName, setUserName] = useState(api.getUserName())
+  const [authenticated, setAuthenticated] = useState(api.hasToken())
+  const [shipments, setShipments] = useState<Shipment[]>([])
+  const [suppliers, setSuppliers] = useState<SupplierAccuracy[]>([])
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [loading, setLoading] = useState(true)
   const [apiError, setApiError] = useState<string | null>(null)
   const [pendingPackets, setPendingPackets] = useState<Record<number, PendingPacket>>({})
 
@@ -84,7 +81,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshAll = useCallback(async () => {
-    if (!liveApi) return
     const [remoteShipments, remoteSuppliers, remoteAudit] = await Promise.all([
       api.getShipments(),
       api.getAccuracy(),
@@ -102,40 +98,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuditLogs(mapAuditLogs(remoteAudit))
   }, [liveApi])
 
-  const bootstrap = useCallback(async (nextRole: Role) => {
-    if (!liveApi) {
-      setRoleState(nextRole)
-      setUserName(credentials[nextRole].name)
-      return
-    }
+  const signIn = useCallback(async (email: string, password: string) => {
     setLoading(true)
     setApiError(null)
     try {
-      const creds = credentials[nextRole]
-      const login = await api.login(creds.email, creds.password)
+      const login = await api.login(email, password)
+      setAuthenticated(true)
       setRoleState(login.role)
-      setUserName(login.fullName || credentials[nextRole].name)
+      setUserName(login.fullName || login.email)
       await refreshAll()
     } catch (error) {
+      api.setToken(null)
+      setAuthenticated(false)
       setApiError(error instanceof Error ? error.message : 'Unable to connect to API')
-      setShipments(structuredClone(demoShipments))
-      setSuppliers(demoSuppliers)
-      setAuditLogs(demoAuditLogs)
+      setShipments([])
+      setSuppliers([])
+      setAuditLogs([])
+      throw error
     } finally {
       setLoading(false)
     }
-  }, [liveApi, refreshAll])
+  }, [refreshAll])
 
   useEffect(() => {
-    void bootstrap('ROLE_EXECUTIVE')
-  }, [bootstrap])
+    if (!api.hasToken()) { setLoading(false); return }
+    setLoading(true)
+    void refreshAll().catch(error => { api.setToken(null); setAuthenticated(false); setApiError(error instanceof Error ? error.message : 'Unable to connect to API') }).finally(() => setLoading(false))
+  }, [refreshAll])
 
-  const setRole = (nextRole: Role) => {
-    void bootstrap(nextRole)
-  }
+  const setRole = (nextRole: Role) => setRoleState(nextRole)
 
   const refreshShipment = useCallback(async (shipmentId: number) => {
-    if (!liveApi) return
     const remote = normalizeShipment(await api.getShipment(shipmentId))
     upsertShipment(remote)
   }, [liveApi, upsertShipment])
@@ -160,7 +153,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })),
       }
     }))
-    if (!liveApi) return
     try {
       await api.editField(fieldId, nextValue, 'Human verification from review workspace')
       await refreshShipment(shipmentId)
@@ -183,7 +175,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fields: document.fields.map(field => ({ ...field, currentValue: '', lowConfidence: true, humanVerified: false })),
       }),
     }))
-    if (!liveApi) return
     try {
       upsertShipment(await api.markUnreadable(documentId))
     } catch {
@@ -196,7 +187,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...shipment,
       documents: shipment.documents.map(document => document.id !== documentId ? document : { ...document, humanVerified: true }),
     }))
-    if (!liveApi) return
     try {
       upsertShipment(await api.verifyDocument(documentId))
     } catch {
@@ -213,7 +203,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         resolutionNote: note,
       }),
     }))
-    if (!liveApi) return
     try {
       upsertShipment(await api.resolveDiscrepancy(discrepancyId, note, role === 'ROLE_MANAGER'))
     } catch {
@@ -223,7 +212,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const approveShipment = async (shipmentId: number) => {
     setShipments(current => current.map(shipment => shipment.id !== shipmentId ? shipment : { ...shipment, status: 'APPROVED' }))
-    if (!liveApi) return
     try {
       upsertShipment(await api.approve(shipmentId))
     } catch (error) {
@@ -232,35 +220,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const createShipment = async (files: Partial<Record<DocumentType, File>>, unreadable: Partial<Record<DocumentType, boolean>>) => {
+  const createShipment = async (files: Partial<Record<DocumentType, File>>, unreadable: Partial<Record<DocumentType, boolean>>, details: { importerName: string; supplierName: string; supplierCountry?: string; importerContact?: string }) => {
     const unreadableDocTypes = (Object.keys(unreadable) as DocumentType[]).filter(type => unreadable[type])
-    if (!liveApi) {
-      const nextId = Math.max(...shipments.map(item => item.id), 24810) + 1
-      const source = structuredClone(shipments[0] ?? demoShipments[0])
-      const created: Shipment = {
-        ...source,
-        id: nextId,
-        shipmentCode: `SHP-${nextId}`,
-        status: 'EXTRACTING',
-        updatedAt: new Date().toISOString(),
-        supplier: 'New supplier · pending',
-        discrepancies: [],
-        documents: source.documents.map(document => ({ ...document, id: document.id + nextId })),
-      }
-      setShipments(current => [created, ...current])
-      setPendingPackets(current => ({ ...current, [nextId]: { files, unreadable: unreadableDocTypes } }))
-      return nextId
-    }
-
     const created = normalizeShipment(await api.createShipment({
-      importerName: 'Company A',
-      supplierName: 'New supplier · pending',
-      supplierCountry: 'Pending',
-      importerContact: '+91-9000000000',
+      ...details,
       unreadableDocTypes,
     }))
-    upsertShipment(created)
-    setPendingPackets(current => ({ ...current, [created.id]: { files, unreadable: unreadableDocTypes } }))
+    let processed = created
+    for (const docType of ['INVOICE', 'PACKING_LIST', 'BILL_OF_LADING'] as DocumentType[]) {
+      const file = files[docType]
+      if (file) processed = normalizeShipment(await api.extractDocument(created.id, docType, file))
+      else if (unreadable[docType]) processed = normalizeShipment(await api.createUnreadableDocument(created.id, docType))
+    }
+    processed = normalizeShipment(await api.runCrossCheck(created.id))
+    upsertShipment(processed)
     return created.id
   }
 
@@ -279,6 +252,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({
     role,
     setRole,
+    authenticated,
+    signIn,
     userName,
     shipments,
     suppliers,
@@ -296,7 +271,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     refreshAll,
     createShipment,
     takePendingPacket,
-  }), [role, userName, shipments, suppliers, auditLogs, liveApi, loading, apiError, pendingPackets, refreshShipment, refreshAll])
+  }), [role, userName, authenticated, signIn, shipments, suppliers, auditLogs, liveApi, loading, apiError, pendingPackets, refreshShipment, refreshAll])
 
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

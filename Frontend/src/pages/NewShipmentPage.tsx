@@ -18,6 +18,10 @@ export function NewShipmentPage() {
   const [unreadable, setUnreadable] = useState<Partial<Record<DocumentType, boolean>>>({})
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [importerName, setImporterName] = useState('')
+  const [supplierName, setSupplierName] = useState('')
+  const [supplierCountry, setSupplierCountry] = useState('')
+  const [importerContact, setImporterContact] = useState('')
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const choose = (type: DocumentType, file?: File) => {
@@ -35,13 +39,13 @@ export function NewShipmentPage() {
     choose(type, event.dataTransfer.files[0])
   }
 
-  const ready = slots.every(slot => Boolean(files[slot.type] || unreadable[slot.type]))
+  const ready = slots.every(slot => Boolean(files[slot.type] || unreadable[slot.type])) && Boolean(importerName.trim() && supplierName.trim())
 
   const begin = async () => {
     setSubmitting(true)
     setError('')
     try {
-      const id = await createShipment(files, unreadable)
+      const id = await createShipment(files, unreadable, { importerName: importerName.trim(), supplierName: supplierName.trim(), supplierCountry: supplierCountry.trim(), importerContact: importerContact.trim() })
       navigate(`/shipments/${id}/extract`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create shipment')
@@ -60,6 +64,12 @@ export function NewShipmentPage() {
         </div>
       </div>
       <Card className="p-6">
+        <div className="mb-6 grid grid-cols-2 gap-4">
+          <label className="text-xs font-medium text-slate-600">Importer name<input required value={importerName} onChange={event => setImporterName(event.target.value)} className="field-input mt-1" /></label>
+          <label className="text-xs font-medium text-slate-600">Supplier name<input required value={supplierName} onChange={event => setSupplierName(event.target.value)} className="field-input mt-1" /></label>
+          <label className="text-xs font-medium text-slate-600">Supplier country<input value={supplierCountry} onChange={event => setSupplierCountry(event.target.value)} className="field-input mt-1" /></label>
+          <label className="text-xs font-medium text-slate-600">Importer contact<input value={importerContact} onChange={event => setImporterContact(event.target.value)} className="field-input mt-1" /></label>
+        </div>
         <div className="mb-6 flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3 text-xs text-blue-800">
           <Info size={15} />
           <span>Upload scans as-is. Bilingual documents and skewed scans are accepted; unreadable documents can be flagged for manual entry without blocking the rest of the packet.</span>

@@ -38,4 +38,4 @@ Approval/export returns HTTP 422 with all blocking reasons for low-confidence un
 
 ## Extraction providers
 
-The default `app.extraction.provider=fallback` parser deterministically handles text/key-value PDF sidecars and fixture uploads without an API key. Set `app.extraction.provider=openai` and `OPENAI_API_KEY` to use the optional vision REST adapter; it sends a zero-data-retention usage-policy header and does not persist provider data.
+The default `app.extraction.provider=fallback` parser handles text uploads containing `key: value` fields. Unsupported or unreadable uploads are routed to manual entry; the parser never substitutes sample shipment values. For image and PDF vision extraction, set `app.extraction.provider=openai` and `OPENAI_API_KEY`. The adapter sends PDF files as `input_file` and supported images as `input_image` to the Responses API, requests `store=false`, and parses returned structured fields. Source document bytes for newly uploaded files are persisted with each document so the review workspace can display the actual source file.

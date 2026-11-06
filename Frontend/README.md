@@ -1,4 +1,4 @@
-# Company A Customs Workspace
+# Customs Operations Workspace
 
 React 18 + TypeScript + Tailwind CSS workspace for the Customs Broker AI Document Extraction & Cross-Check Tool.
 
@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-The app runs in a fully interactive demo mode by default using the seeded shipment data. Set `VITE_API_URL=http://localhost:8080/api` in `.env.local` to enable the Spring Boot API client. API calls gracefully fall back to the in-memory demo state when the backend is unavailable.
+The frontend requires the Spring Boot backend at `http://localhost:8080/api` (override with `VITE_API_URL`). Sign in with an account provisioned in the backend. Shipment records, report data, review edits, and source document bytes are loaded from and saved through the backend; an API failure does not switch the app to fabricated local shipment data.
 
 ## Routes
 
@@ -20,4 +20,4 @@ The app runs in a fully interactive demo mode by default using the seeded shipme
 - `/shipments/:id/approval` — manager gatekeeper and CSV/XLSX export
 - `/analytics` — supplier accuracy and field audit history
 
-The role switcher in the top bar toggles executive and manager experiences without requiring a login during evaluation. The API client supports JWT login and the backend endpoints documented in the Spring Boot service.
+Use the account menu to re-authenticate as a different role. The backend JWT determines access to approval actions.

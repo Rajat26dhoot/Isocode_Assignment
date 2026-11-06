@@ -38,6 +38,11 @@ public class ShipmentQueryService {
         return new ShipmentDetail(shipment.getId(), shipment.getShipmentCode(), shipment.getImporterName(), shipment.getSupplier().getName(), shipment.getStatus(), shipment.getUpdatedAt(), docs, checks);
     }
 
+    @Transactional(readOnly = true)
+    public ShipmentDocument document(Long documentId) {
+        return documents.findById(documentId).orElseThrow(() -> new ApiExceptions.NotFound("Document not found: " + documentId));
+    }
+
     private DocumentResponse document(ShipmentDocument doc) {
         return new DocumentResponse(
                 doc.getId(),

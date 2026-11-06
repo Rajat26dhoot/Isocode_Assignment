@@ -45,4 +45,4 @@ app:
   openai:
     api-key: ${OPENAI_API_KEY:}
     model: ${OPENAI_VISION_MODEL:gpt-4o-mini}
-    endpoint: ${OPENAI_VISION_ENDPOINT:https://api.openai.com/v1/chat/completions}
+    endpoint: ${OPENAI_VISION_ENDPOINT:https://api.openai.com/v1/responses}

@@ -11,6 +11,8 @@ public class ShipmentDocument {
     @Enumerated(EnumType.STRING) @Column(nullable = false) private Enums.DocumentType docType;
     @Column(nullable = false) private String fileName;
     private String fileUrl;
+    @Lob @Column(columnDefinition = "LONGBLOB") private byte[] fileContent;
+    private String contentType;
     private Integer pageCount;
     @Builder.Default @Column(nullable = false) private boolean isUnreadable = false;
     @Enumerated(EnumType.STRING) @Column(nullable = false) @Builder.Default private Enums.ExtractionStatus extractionStatus = Enums.ExtractionStatus.PENDING;

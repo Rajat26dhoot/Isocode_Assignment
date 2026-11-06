@@ -2,16 +2,25 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { BarChart3, Boxes, ChevronDown, Database, FilePlus2, Info, LockKeyhole, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
 import { useApp } from '../lib/AppContext'
-import { Badge } from '../components/ui'
+import { Badge, Button } from '../components/ui'
 import type { Role } from '../types/domain'
 
 const nav = [{ to: '/shipments', label: 'Shipment queue', icon: Boxes }, { to: '/shipments/new', label: 'New shipment', icon: FilePlus2 }, { to: '/analytics', label: 'Accuracy & audit', icon: BarChart3 }]
 
 export function AppLayout() {
-  const { role, setRole, userName, liveApi, loading, apiError } = useApp()
+  const { role, userName, liveApi, loading, apiError, authenticated, signIn } = useApp()
   const location = useLocation()
   const [notesOpen, setNotesOpen] = useState(false)
-  const switchRole = () => setRole(role === 'ROLE_EXECUTIVE' ? 'ROLE_MANAGER' : 'ROLE_EXECUTIVE')
+  const [switching, setSwitching] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+  const submitLogin = async (event: React.FormEvent) => {
+    event.preventDefault(); setAuthError('')
+    try { await signIn(email, password); setPassword(''); setSwitching(false) }
+    catch (error) { setAuthError(error instanceof Error ? error.message : 'Sign in failed') }
+  }
+  if (!authenticated) return <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6"><form onSubmit={event => void submitLogin(event)} className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-panel"><div className="mb-5"><div className="text-lg font-semibold text-slate-950">Sign in to Customs Operations</div><p className="mt-1 text-xs text-slate-500">Use your documentation workspace account.</p></div><label className="mb-3 block text-xs font-medium text-slate-600">Email<input type="email" required value={email} onChange={event => setEmail(event.target.value)} className="field-input mt-1" /></label><label className="block text-xs font-medium text-slate-600">Password<input type="password" required value={password} onChange={event => setPassword(event.target.value)} className="field-input mt-1" /></label>{(authError || apiError) && <div className="mt-3 text-xs text-rose-600">{authError || apiError}</div>}<Button variant="primary" disabled={loading} className="mt-5 w-full">{loading ? 'Signing in…' : 'Sign in'}</Button></form></div>
   const pageTitle = location.pathname.includes('/review')
     ? 'Review workspace'
     : location.pathname.includes('/approval')
@@ -54,7 +63,7 @@ export function AppLayout() {
           <div className="rounded-lg bg-slate-50 p-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Workspace region</div>
             <div className="mt-1 text-xs font-medium text-slate-700">Nhava Sheva · India</div>
-            <div className="mt-0.5 text-[10px] text-slate-400">{liveApi ? 'Aiven MySQL · India' : 'Demo mode'} · {loading ? 'syncing…' : 'synced'}</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">Backend database · {loading ? 'syncing…' : apiError ? 'connection issue' : 'synced'}</div>
           </div>
         </div>
       </aside>
@@ -69,9 +78,9 @@ export function AppLayout() {
               <Info size={15} />
             </button>
             <Badge tone={liveApi && !apiError ? 'green' : apiError ? 'amber' : 'blue'} dot>
-              {liveApi && !apiError ? 'Live API' : apiError ? 'API fallback' : 'Demo mode'}
+              {liveApi && !apiError ? 'Backend connected' : 'Backend unavailable'}
             </Badge>
-            <button onClick={switchRole} className="group flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50">
+            <button onClick={() => { setSwitching(true); setAuthError('') }} className="group flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50">
               <div className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${role === 'ROLE_MANAGER' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
                 {role === 'ROLE_MANAGER' ? 'MS' : 'RM'}
               </div>
@@ -85,6 +94,7 @@ export function AppLayout() {
         </header>
         <div className="px-8 py-7"><Outlet /></div>
         {notesOpen && <SystemNotesModal onClose={() => setNotesOpen(false)} />}
+        {switching && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 p-6"><form onSubmit={event => void submitLogin(event)} className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-2xl"><div className="mb-4 text-sm font-semibold text-slate-900">Sign in as another role</div><label className="mb-3 block text-xs font-medium text-slate-600">Email<input type="email" required value={email} onChange={event => setEmail(event.target.value)} className="field-input mt-1" /></label><label className="block text-xs font-medium text-slate-600">Password<input type="password" required value={password} onChange={event => setPassword(event.target.value)} className="field-input mt-1" /></label>{authError && <div className="mt-3 text-xs text-rose-600">{authError}</div>}<div className="mt-5 flex justify-end gap-2"><Button onClick={() => setSwitching(false)}>Cancel</Button><Button variant="primary" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</Button></div></form></div>}
       </main>
     </div>
   )

@@ -42,8 +42,20 @@ class ApiClient {
   setToken(token: string | null) {
     this.token = token
     if (token) localStorage.setItem('customs.jwt', token)
-    else localStorage.removeItem('customs.jwt')
+    else {
+      localStorage.removeItem('customs.jwt')
+      localStorage.removeItem('customs.role')
+      localStorage.removeItem('customs.user')
+    }
   }
+
+  setSessionIdentity(role: Role, fullName: string) {
+    localStorage.setItem('customs.role', role)
+    localStorage.setItem('customs.user', fullName)
+  }
+
+  getRole(): Role { return (localStorage.getItem('customs.role') as Role | null) ?? 'ROLE_EXECUTIVE' }
+  getUserName() { return localStorage.getItem('customs.user') ?? '' }
 
   hasToken() {
     return Boolean(this.token)
@@ -55,6 +67,7 @@ class ApiClient {
       body: JSON.stringify({ email, password }),
     })
     this.setToken(result.token)
+    this.setSessionIdentity(result.role, result.fullName)
     return result
   }
 
@@ -64,6 +77,13 @@ class ApiClient {
 
   getShipment(id: number) {
     return this.request<Shipment>(`/shipments/${id}`)
+  }
+
+  getDocumentContent(documentId: number) {
+    return fetch(`${API_URL}/shipments/documents/${documentId}/content`, { headers: this.token ? { Authorization: `Bearer ${this.token}` } : {} }).then(async response => {
+      if (!response.ok) throw new Error(await response.text() || `Request failed (${response.status})`)
+      return response.blob()
+    })
   }
 
   createShipment(payload: CreateShipmentPayload) {

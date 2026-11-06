@@ -27,16 +27,10 @@ export function ExtractionProgressPage() {
     const run = async () => {
       const packet = takePendingPacket(shipment.id)
       if (!liveApi || !packet) {
-        const timer = window.setInterval(() => {
-          setActive(value => {
-            if (value >= 4) {
-              window.clearInterval(timer)
-              if (!cancelled) setDone(true)
-              return 4
-            }
-            return value + 1
-          })
-        }, 850)
+        const complete = shipment.documents.some(document => document.extractionStatus === 'COMPLETED' || document.unreadable)
+        setActive(complete ? 4 : 0)
+        if (!complete) setError('No processed source documents were found. Return to the shipment list and upload the packet again.')
+        setDone(true)
         return
       }
 
