@@ -38,7 +38,7 @@ public class CrossCheckService {
 
     private void checkNumeric(Shipment shipment, Enums.RuleCode rule, String key, Map<Enums.DocumentType, ShipmentDocument> docs, boolean decimal) {
         BigDecimal invoice = value(docs.get(Enums.DocumentType.INVOICE), key); BigDecimal packing = value(docs.get(Enums.DocumentType.PACKING_LIST), key); BigDecimal bol = value(docs.get(Enums.DocumentType.BILL_OF_LADING), key);
-        List<BigDecimal> values = List.of(invoice, packing, bol).stream().filter(Objects::nonNull).toList();
+        List<BigDecimal> values = java.util.stream.Stream.of(invoice, packing, bol).filter(Objects::nonNull).toList();
         boolean mismatch = values.size() >= 2 && values.stream().anyMatch(v -> v.subtract(values.get(0)).abs().compareTo(decimal ? TOLERANCE : BigDecimal.ZERO) > 0);
         if (mismatch) {
             BigDecimal min = values.stream().min(BigDecimal::compareTo).orElse(BigDecimal.ZERO), max = values.stream().max(BigDecimal::compareTo).orElse(BigDecimal.ZERO);

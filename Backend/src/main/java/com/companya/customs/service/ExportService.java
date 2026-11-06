@@ -19,7 +19,17 @@ import java.util.stream.Collectors;
 public class ExportService {
     private final ShipmentRepository shipments; private final ShipmentDocumentRepository documents; private final ExtractedFieldRepository fields; private final CrossCheckDiscrepancyRepository discrepancies; private final UserRepository users;
     @Transactional public Shipment approve(Long shipmentId, User manager) { Shipment shipment = get(shipmentId); enforceGate(shipment); shipment.setStatus(Enums.ShipmentStatus.APPROVED); shipment.setApprovedByManager(manager); shipment.setApprovedAt(Instant.now()); return shipments.save(shipment); }
-    @Transactional public ExportFile export(Long shipmentId, String format, User user) { Shipment shipment = get(shipmentId); enforceGate(shipment); if (shipment.getStatus() != Enums.ShipmentStatus.APPROVED) throw new ApiExceptions.ExportBlocked("Shipment must be APPROVED before export"); byte[] bytes = "xlsx".equalsIgnoreCase(format) ? xlsx(shipment) : csv(shipment); shipment.setStatus(Enums.ShipmentStatus.EXPORTED); shipments.save(shipment); return new ExportFile(bytes, "xlsx".equalsIgnoreCase(format) ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/csv", shipment.getShipmentCode() + "." + ("xlsx".equalsIgnoreCase(format) ? "xlsx" : "csv")); }
+    @Transactional public ExportFile export(Long shipmentId, String format, User user) {
+        Shipment shipment = get(shipmentId);
+        enforceGate(shipment);
+        if (shipment.getStatus() != Enums.ShipmentStatus.APPROVED && shipment.getStatus() != Enums.ShipmentStatus.EXPORTED) {
+            throw new ApiExceptions.ExportBlocked("Shipment must be APPROVED before export");
+        }
+        byte[] bytes = "xlsx".equalsIgnoreCase(format) ? xlsx(shipment) : csv(shipment);
+        shipment.setStatus(Enums.ShipmentStatus.EXPORTED);
+        shipments.save(shipment);
+        return new ExportFile(bytes, "xlsx".equalsIgnoreCase(format) ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/csv", shipment.getShipmentCode() + "." + ("xlsx".equalsIgnoreCase(format) ? "xlsx" : "csv"));
+    }
     public void enforceGate(Shipment shipment) {
         List<String> reasons = new ArrayList<>();
         fields.findByDocumentShipmentId(shipment.getId()).stream().filter(f -> f.getConfidenceScore().compareTo(new BigDecimal("0.850")) < 0 && !f.isHumanVerified()).forEach(f -> reasons.add("Low-confidence field " + f.getFieldKey() + " on " + f.getDocument().getDocType() + " must be human verified"));

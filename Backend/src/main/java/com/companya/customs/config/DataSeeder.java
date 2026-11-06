@@ -19,8 +19,8 @@ public class DataSeeder {
     @Transactional
     public void seed() {
         if (users.count() > 0) return;
-        User exec = users.save(User.builder().fullName("Company A Executive").email("exec@companya.in").passwordHash(encoder.encode("password123")).role(Enums.Role.ROLE_EXECUTIVE).build());
-        User manager = users.save(User.builder().fullName("Company A Manager").email("manager@companya.in").passwordHash(encoder.encode("password123")).role(Enums.Role.ROLE_MANAGER).build());
+        User exec = users.save(User.builder().fullName("Rajat Mehta").email("exec@companya.in").passwordHash(encoder.encode("password123")).role(Enums.Role.ROLE_EXECUTIVE).build());
+        User manager = users.save(User.builder().fullName("Mira Shah").email("manager@companya.in").passwordHash(encoder.encode("password123")).role(Enums.Role.ROLE_MANAGER).build());
         Supplier china = suppliers.save(Supplier.builder().name("Company B (China)").country("China").build()); Supplier sweden = suppliers.save(Supplier.builder().name("Company C (Sweden)").country("Sweden").build());
         Shipment s1 = shipments.save(Shipment.builder().shipmentCode("SHP-24811").importerName("Company A").importerContactEncrypted("+91-9876543210").supplier(china).assignedExecutive(exec).status(Enums.ShipmentStatus.NEEDS_REVIEW).build());
         Shipment s2 = shipments.save(Shipment.builder().shipmentCode("SHP-24812").importerName("Company A").importerContactEncrypted("+91-9876543211").supplier(sweden).assignedExecutive(exec).status(Enums.ShipmentStatus.NEEDS_REVIEW).build());

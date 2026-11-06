@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { BarChart3, Boxes, ChevronDown, Database, FilePlus2, Info, LockKeyhole, ShieldCheck, Sparkles, UploadCloud, X } from 'lucide-react'
+import { BarChart3, Boxes, ChevronDown, Database, FilePlus2, Info, LockKeyhole, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
 import { useApp } from '../lib/AppContext'
 import { Badge } from '../components/ui'
@@ -8,17 +8,86 @@ import type { Role } from '../types/domain'
 const nav = [{ to: '/shipments', label: 'Shipment queue', icon: Boxes }, { to: '/shipments/new', label: 'New shipment', icon: FilePlus2 }, { to: '/analytics', label: 'Accuracy & audit', icon: BarChart3 }]
 
 export function AppLayout() {
-  const { role, setRole, userName, liveApi } = useApp(); const location = useLocation(); const [notesOpen, setNotesOpen] = useState(false)
+  const { role, setRole, userName, liveApi, loading, apiError } = useApp()
+  const location = useLocation()
+  const [notesOpen, setNotesOpen] = useState(false)
   const switchRole = () => setRole(role === 'ROLE_EXECUTIVE' ? 'ROLE_MANAGER' : 'ROLE_EXECUTIVE')
-  const pageTitle = location.pathname.includes('/review') ? 'Review workspace' : location.pathname.includes('/analytics') ? 'Accuracy & audit' : location.pathname.includes('/new') ? 'New shipment' : 'Shipment queue'
-  return <div className="flex min-h-screen bg-slate-50">
-    <aside className="fixed inset-y-0 left-0 z-20 flex w-[232px] flex-col border-r border-slate-200 bg-white">
-      <div className="flex h-[73px] items-center gap-3 border-b border-slate-200 px-5"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white"><Sparkles size={16} /></div><div><div className="text-sm font-semibold tracking-tight">Company A</div><div className="text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400">Customs operations</div></div></div>
-      <div className="px-3 pt-5"><div className="eyebrow px-2 pb-2">Workspace</div>{nav.map(item => { const Icon = item.icon; return <NavLink key={item.to} to={item.to} className={({ isActive }) => `mb-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${isActive ? 'bg-slate-100 text-slate-950' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}><Icon size={16} strokeWidth={1.8} />{item.label}</NavLink> })}</div>
-      <div className="mt-auto border-t border-slate-200 p-4"><div className="mb-3 flex items-center gap-2"><ShieldCheck size={15} className="text-emerald-600" /><span className="text-xs font-semibold text-slate-700">DPDP Act 2023</span><Badge tone="green">Compliant</Badge></div><div className="rounded-lg bg-slate-50 p-3"><div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Workspace region</div><div className="mt-1 text-xs font-medium text-slate-700">Nhava Sheva · India</div><div className="mt-0.5 text-[10px] text-slate-400">Last sync just now</div></div></div>
-    </aside>
-    <main className="ml-[232px] min-h-screen flex-1"><header className="sticky top-0 z-10 flex h-[73px] items-center justify-between border-b border-slate-200 bg-white/90 px-8 backdrop-blur"><div><div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Company A / {pageTitle}</div><div className="mt-1 text-sm font-semibold text-slate-900">Documentation control room</div></div><div className="flex items-center gap-3"><button title="System notes and production limits" onClick={() => setNotesOpen(true)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"><Info size={15} /></button><Badge tone={liveApi ? 'green' : 'blue'} dot>{liveApi ? 'Live API' : 'Demo mode'}</Badge><button onClick={switchRole} className="group flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"><div className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${role === 'ROLE_MANAGER' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>{role === 'ROLE_MANAGER' ? 'MS' : 'RM'}</div><div><div className="text-xs font-semibold text-slate-800">{role === 'ROLE_MANAGER' ? 'Documentation Manager' : 'Documentation Executive'}</div><div className="text-[10px] text-slate-400">{userName} · switch role</div></div><ChevronDown size={14} className="text-slate-400 transition group-hover:text-slate-700" /></button></div></header><div className="px-8 py-7"><Outlet /></div>{notesOpen && <SystemNotesModal onClose={() => setNotesOpen(false)} />}</main>
-  </div>
+  const pageTitle = location.pathname.includes('/review')
+    ? 'Review workspace'
+    : location.pathname.includes('/approval')
+      ? 'Approval gatekeeper'
+      : location.pathname.includes('/extract')
+        ? 'Extraction'
+        : location.pathname.includes('/analytics')
+          ? 'Accuracy & audit'
+          : location.pathname.includes('/new')
+            ? 'New shipment'
+            : 'Shipment queue'
+
+  return (
+    <div className="flex min-h-screen bg-slate-50">
+      <aside className="fixed inset-y-0 left-0 z-20 flex w-[232px] flex-col border-r border-slate-200 bg-white">
+        <div className="flex h-[73px] items-center gap-3 border-b border-slate-200 px-5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white"><Sparkles size={16} /></div>
+          <div>
+            <div className="text-sm font-semibold tracking-tight">Company A</div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400">Customs operations</div>
+          </div>
+        </div>
+        <div className="px-3 pt-5">
+          <div className="eyebrow px-2 pb-2">Workspace</div>
+          {nav.map(item => {
+            const Icon = item.icon
+            return (
+              <NavLink key={item.to} to={item.to} className={({ isActive }) => `mb-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${isActive ? 'bg-slate-100 text-slate-950' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
+                <Icon size={16} strokeWidth={1.8} />{item.label}
+              </NavLink>
+            )
+          })}
+        </div>
+        <div className="mt-auto border-t border-slate-200 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <ShieldCheck size={15} className="text-emerald-600" />
+            <span className="text-xs font-semibold text-slate-700">DPDP Act 2023</span>
+            <Badge tone="green">Compliant</Badge>
+          </div>
+          <div className="rounded-lg bg-slate-50 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Workspace region</div>
+            <div className="mt-1 text-xs font-medium text-slate-700">Nhava Sheva · India</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">{liveApi ? 'Aiven MySQL · India' : 'Demo mode'} · {loading ? 'syncing…' : 'synced'}</div>
+          </div>
+        </div>
+      </aside>
+      <main className="ml-[232px] min-h-screen flex-1">
+        <header className="sticky top-0 z-10 flex h-[73px] items-center justify-between border-b border-slate-200 bg-white/90 px-8 backdrop-blur">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Company A / {pageTitle}</div>
+            <div className="mt-1 text-sm font-semibold text-slate-900">Documentation control room</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button title="System notes and production limits" onClick={() => setNotesOpen(true)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700">
+              <Info size={15} />
+            </button>
+            <Badge tone={liveApi && !apiError ? 'green' : apiError ? 'amber' : 'blue'} dot>
+              {liveApi && !apiError ? 'Live API' : apiError ? 'API fallback' : 'Demo mode'}
+            </Badge>
+            <button onClick={switchRole} className="group flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50">
+              <div className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${role === 'ROLE_MANAGER' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+                {role === 'ROLE_MANAGER' ? 'MS' : 'RM'}
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-slate-800">{role === 'ROLE_MANAGER' ? 'Documentation Manager' : 'Documentation Executive'}</div>
+                <div className="text-[10px] text-slate-400">{userName} · switch role</div>
+              </div>
+              <ChevronDown size={14} className="text-slate-400 transition group-hover:text-slate-700" />
+            </button>
+          </div>
+        </header>
+        <div className="px-8 py-7"><Outlet /></div>
+        {notesOpen && <SystemNotesModal onClose={() => setNotesOpen(false)} />}
+      </main>
+    </div>
+  )
 }
 
 function SystemNotesModal({ onClose }: { onClose: () => void }) {

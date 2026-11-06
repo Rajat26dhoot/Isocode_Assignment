@@ -16,6 +16,10 @@ public class ApiExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, message);
     }
     @ExceptionHandler(ApiExceptions.ExportBlocked.class) ResponseEntity<ErrorResponse> blocked(ApiExceptions.ExportBlocked ex) { return error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage()); }
-    @ExceptionHandler(Exception.class) ResponseEntity<ErrorResponse> generic(Exception ex) { return error(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error"); }
+    @ExceptionHandler(Exception.class) ResponseEntity<ErrorResponse> generic(Exception ex) {
+        ex.printStackTrace();
+        String message = ex.getMessage() == null ? "Unexpected server error" : ex.getMessage();
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, message);
+    }
     private ResponseEntity<ErrorResponse> error(HttpStatus status, String message) { return ResponseEntity.status(status).body(new ErrorResponse(Instant.now(), status.value(), status.getReasonPhrase(), message)); }
 }
