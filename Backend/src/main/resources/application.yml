@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: customs-document-extraction
+  datasource:
+    url: jdbc:mysql://${AIVEN_DB_HOST:localhost}:${AIVEN_DB_PORT:3306}/${AIVEN_DB_NAME:customs}?sslMode=REQUIRED&useUnicode=true&characterEncoding=UTF-8
+    username: ${AIVEN_DB_USER:root}
+    password: ${AIVEN_DB_PASSWORD:password}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 20000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 50MB
+server:
+  port: ${PORT:8080}
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-this-secret-to-a-32-byte-minimum-production-secret}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:480}
+  extraction:
+    provider: ${EXTRACTION_PROVIDER:fallback}
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    model: ${OPENAI_VISION_MODEL:gpt-4o-mini}
+    endpoint: ${OPENAI_VISION_ENDPOINT:https://api.openai.com/v1/chat/completions}
