@@ -7,7 +7,7 @@ export function Badge({ children, tone = 'slate', dot = false }: { children: Rea
 }
 
 export function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, ['slate' | 'amber' | 'red' | 'green' | 'blue', string]> = { NEEDS_REVIEW: ['amber', 'Needs review'], READY_FOR_APPROVAL: ['blue', 'Ready for approval'], APPROVED: ['green', 'Approved'], EXPORTED: ['green', 'Exported'], EXTRACTING: ['blue', 'Extracting'], DRAFT: ['slate', 'Draft'] }
+  const map: Record<string, ['slate' | 'amber' | 'red' | 'green' | 'blue', string]> = { DOCUMENTS_PENDING: ['slate', 'Documents pending'], NEEDS_REVIEW: ['amber', 'Review required'], VALIDATION_FAILED: ['red', 'Validation failed'], PENDING_APPROVAL: ['blue', 'Pending approval'], READY_FOR_APPROVAL: ['blue', 'Ready for approval'], APPROVED: ['green', 'Approved'], EXPORTED: ['green', 'Exported'], REJECTED: ['red', 'Rejected'], EXTRACTING: ['blue', 'Processing'], DRAFT: ['slate', 'Draft'] }
   const [tone, label] = map[status] ?? ['slate', status.replace(/_/g, ' ')]
   return <Badge tone={tone} dot>{label}</Badge>
 }

@@ -7,6 +7,14 @@ import { api } from '../lib/api'
 import type { DocumentType } from '../types/domain'
 
 const order: DocumentType[] = ['INVOICE', 'PACKING_LIST', 'BILL_OF_LADING']
+const labels: Record<DocumentType, string> = { INVOICE: 'Commercial Invoice', PACKING_LIST: 'Packing List', BILL_OF_LADING: 'Bill of Lading' }
+
+function failedDocumentNames(documents: ReturnType<typeof useApp>['shipments'][number]['documents']) {
+  return order.flatMap(type => {
+    const latest = documents.filter(document => document.docType === type).sort((a, b) => b.id - a.id)[0]
+    return latest?.extractionStatus === 'FAILED' ? [labels[type]] : []
+  })
+}
 
 export function ExtractionProgressPage() {
   const { id } = useParams()
@@ -28,19 +36,24 @@ export function ExtractionProgressPage() {
       const packet = takePendingPacket(shipment.id)
       if (!liveApi || !packet) {
         const complete = shipment.documents.some(document => document.extractionStatus === 'COMPLETED' || document.unreadable)
-        setActive(complete ? 4 : 0)
-        if (!complete) setError('No processed source documents were found. Return to the shipment list and upload the packet again.')
+        setActive(4)
+        const failures = failedDocumentNames(shipment.documents)
+        if (failures.length) setError(`Extraction failed for ${failures.join(', ')}. The uploaded file is saved; retry extraction from the review workspace or enter the fields manually.`)
+        else if (!complete) setError('No source documents are uploaded yet. Continue to review and add documents when they are available.')
         setDone(true)
         return
       }
 
       try {
+        const failures: string[] = []
         for (let index = 0; index < order.length; index++) {
           if (cancelled) return
           const type = order[index]
           setActive(index)
           if (packet.files[type]) {
-            await api.extractDocument(shipment.id, type, packet.files[type]!)
+            const result = await api.extractDocument(shipment.id, type, packet.files[type]!)
+            const latest = result.documents.filter(document => document.docType === type).sort((a, b) => b.id - a.id)[0]
+            if (latest?.extractionStatus === 'FAILED') failures.push(labels[type])
           } else if (packet.unreadable.includes(type)) {
             await api.createUnreadableDocument(shipment.id, type)
           }
@@ -49,6 +62,7 @@ export function ExtractionProgressPage() {
         setActive(3)
         await api.runCrossCheck(shipment.id)
         await refreshShipment(shipment.id)
+        if (failures.length) setError(`Extraction failed for ${failures.join(', ')}. The uploaded file is saved; retry extraction from the review workspace or enter the fields manually.`)
         setActive(4)
         setDone(true)
       } catch (err) {
@@ -68,11 +82,20 @@ export function ExtractionProgressPage() {
   }
 
   const openCount = shipment.discrepancies.filter(item => item.status === 'OPEN').length
-  const stages: { label: string; detail: string; icon: React.ReactNode; status: 'complete' | 'active' | 'waiting' }[] = [
-    { label: 'Commercial Invoice', detail: 'Parties, totals, line items', icon: <FileSearch size={16} />, status: active > 0 ? 'complete' : 'active' },
-    { label: 'Packing List', detail: 'Packages and weights', icon: <FileSearch size={16} />, status: active > 1 ? 'complete' : active === 1 ? 'active' : 'waiting' },
-    { label: 'Bill of Lading', detail: 'Container and consignee details', icon: <FileSearch size={16} />, status: active > 2 ? 'complete' : active === 2 ? 'active' : 'waiting' },
-    { label: '3-way reconciliation', detail: done ? (openCount > 0 ? `${openCount} discrepancy found` : 'All checks passed') : 'Comparing matching fields', icon: <Network size={16} />, status: active > 3 ? 'complete' : active === 3 ? 'active' : 'waiting' },
+  const hasDocuments = shipment.documents.length > 0
+  const failedNames = failedDocumentNames(shipment.documents)
+  const hasExtractionFailures = failedNames.length > 0
+  const documentStatus = (type: DocumentType, index: number): 'complete' | 'failed' | 'active' | 'waiting' => {
+    const latest = shipment.documents.filter(document => document.docType === type).sort((a, b) => b.id - a.id)[0]
+    if (latest?.extractionStatus === 'FAILED') return 'failed'
+    if (latest?.extractionStatus === 'COMPLETED') return 'complete'
+    return !done && active === index ? 'active' : 'waiting'
+  }
+  const stages: { label: string; detail: string; icon: React.ReactNode; status: 'complete' | 'failed' | 'active' | 'waiting' }[] = [
+    { label: labels.INVOICE, detail: 'Parties, totals, line items', icon: <FileSearch size={16} />, status: documentStatus('INVOICE', 0) },
+    { label: labels.PACKING_LIST, detail: 'Packages and weights', icon: <FileSearch size={16} />, status: documentStatus('PACKING_LIST', 1) },
+    { label: labels.BILL_OF_LADING, detail: 'Container and consignee details', icon: <FileSearch size={16} />, status: documentStatus('BILL_OF_LADING', 2) },
+    { label: 'Cross-document validation', detail: done && hasDocuments ? (openCount > 0 ? `${openCount} finding(s) need review` : 'Completed') : hasDocuments ? 'Comparing matching fields' : 'Waiting for source documents', icon: <Network size={16} />, status: done && hasDocuments ? 'complete' : !done && hasDocuments ? 'active' : 'waiting' },
   ]
 
   return (
@@ -82,29 +105,30 @@ export function ExtractionProgressPage() {
           <LoaderCircle size={22} className={!done ? 'animate-spin' : ''} />
         </div>
         <SectionTitle
-          title={done ? 'Extraction complete' : 'Reading your documents'}
-          description={done ? `The packet for ${shipment.shipmentCode} is ready for human review.` : 'AI is extracting fields and checking agreement across the source documents.'}
+          title={done ? hasDocuments ? hasExtractionFailures ? 'Extraction needs attention' : 'Extraction complete' : 'Shipment created' : 'Reading your documents'}
+          description={done ? hasDocuments ? hasExtractionFailures ? `Some files in ${shipment.shipmentCode} could not be processed.` : `The packet for ${shipment.shipmentCode} is ready for human review.` : 'Upload the required documents from the review workspace when they are available.' : 'The configured extraction provider is processing uploaded files.'}
         />
         <div className="mt-4 flex items-center justify-center gap-2">
           <Badge tone="blue" dot>Packet {shipment.shipmentCode}</Badge>
+          {done && hasExtractionFailures && <Badge tone="amber" dot>Extraction failed</Badge>}
           {done && openCount > 0 && <Badge tone="amber" dot>{openCount} mismatch needs review</Badge>}
-          {done && openCount === 0 && <Badge tone="green" dot>Cross-check passed</Badge>}
+          {done && hasDocuments && !hasExtractionFailures && openCount === 0 && <Badge tone="green" dot>Cross-check complete</Badge>}
         </div>
       </div>
       <Card className="p-6">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <div className="text-xs font-semibold text-slate-800">Extraction pipeline</div>
-            <div className="mt-1 text-xs text-slate-400">Secure processing · zero data retention</div>
+            <div className="mt-1 text-xs text-slate-400">Provider settings are controlled by deployment configuration.</div>
           </div>
-          <div className="numeric text-sm font-semibold text-slate-700">{Math.min(100, active * 25)}%</div>
+            <div className="numeric text-sm font-semibold text-slate-700">{Math.round(stages.filter(stage => stage.status === 'complete').length / stages.length * 100)}%</div>
         </div>
-        <ProgressBar value={Math.min(100, active * 25)} tone={done ? 'green' : 'slate'} />
+        <ProgressBar value={stages.filter(stage => stage.status === 'complete').length / stages.length * 100} tone={done && hasDocuments && !hasExtractionFailures ? 'green' : 'slate'} />
         <div className="mt-6 divide-y divide-slate-100">
           {stages.map((stage, index) => (
             <div key={stage.label} className="flex items-center gap-4 py-4">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-full ${stage.status === 'complete' ? 'bg-emerald-100 text-emerald-700' : stage.status === 'active' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                {stage.status === 'complete' ? <Check size={15} /> : stage.status === 'active' ? <LoaderCircle size={15} className="animate-spin" /> : stage.icon}
+              <div className={`flex h-8 w-8 items-center justify-center rounded-full ${stage.status === 'complete' ? 'bg-emerald-100 text-emerald-700' : stage.status === 'failed' ? 'bg-rose-100 text-rose-700' : stage.status === 'active' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                {stage.status === 'complete' ? <Check size={15} /> : stage.status === 'failed' ? <CircleAlert size={15} /> : stage.status === 'active' ? <LoaderCircle size={15} className="animate-spin" /> : stage.icon}
               </div>
               <div className="flex-1">
                 <div className="text-sm font-semibold text-slate-800">{stage.label}</div>
@@ -115,7 +139,7 @@ export function ExtractionProgressPage() {
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700"><CircleAlert size={14} /> Review needed</div>
                 ) : (
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                    {stage.status === 'complete' ? 'Complete' : stage.status === 'active' ? 'Processing' : 'Queued'}
+                    {stage.status === 'failed' ? 'Failed' : stage.status === 'complete' ? 'Complete' : stage.status === 'active' ? 'Processing' : 'Queued'}
                   </span>
                 )}
               </div>

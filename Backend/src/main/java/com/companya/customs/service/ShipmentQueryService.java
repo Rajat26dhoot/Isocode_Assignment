@@ -21,8 +21,9 @@ public class ShipmentQueryService {
     private final CrossCheckDiscrepancyRepository discrepancies;
 
     @Transactional(readOnly = true)
-    public List<ShipmentSummary> list() {
-        return shipments.findAll().stream()
+    public List<ShipmentSummary> list(User user) {
+        List<Shipment> rows = user.getRole() == Enums.Role.ROLE_MANAGER ? shipments.findAll() : shipments.findByAssignedExecutiveId(user.getId());
+        return rows.stream()
                 .sorted(Comparator.comparing(Shipment::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(s -> new ShipmentSummary(s.getId(), s.getShipmentCode(), s.getImporterName(), s.getSupplier().getName(), s.getStatus(), s.getUpdatedAt()))
                 .toList();
@@ -31,11 +32,11 @@ public class ShipmentQueryService {
     @Transactional(readOnly = true)
     public ShipmentDetail get(Long id) {
         Shipment shipment = shipments.findById(id).orElseThrow(() -> new ApiExceptions.NotFound("Shipment not found: " + id));
-        List<DocumentResponse> docs = documents.findByShipmentId(id).stream().map(this::document).toList();
+        List<DocumentResponse> docs = documents.findByShipmentId(id).stream().sorted(Comparator.comparing(ShipmentDocument::getId)).map(this::document).toList();
         List<DiscrepancyResponse> checks = discrepancies.findByShipmentId(id).stream()
                 .map(d -> new DiscrepancyResponse(d.getId(), d.getRuleCode(), d.getSeverity(), d.getInvoiceValue(), d.getPackingListValue(), d.getBolValue(), d.getExpectedOrDelta(), d.getStatus(), d.getResolutionNote()))
                 .toList();
-        return new ShipmentDetail(shipment.getId(), shipment.getShipmentCode(), shipment.getImporterName(), shipment.getSupplier().getName(), shipment.getStatus(), shipment.getUpdatedAt(), docs, checks);
+        return new ShipmentDetail(shipment.getId(), shipment.getShipmentCode(), shipment.getImporterName(), shipment.getSupplier().getName(), shipment.getStatus(), shipment.getUpdatedAt(), docs, checks, shipment.getRejectionReason());
     }
 
     @Transactional(readOnly = true)

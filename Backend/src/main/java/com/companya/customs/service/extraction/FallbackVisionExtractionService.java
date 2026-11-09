@@ -8,6 +8,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 
 /** Deterministic parser for text-backed PDFs, OCR sidecars, and key:value fixture uploads. */
 @Service("fallbackVisionExtractionService")
@@ -16,7 +19,8 @@ public class FallbackVisionExtractionService implements VisionExtractionService 
 
     @Override
     public ExtractionResult extract(byte[] content, String fileName, Enums.DocumentType type) {
-        String text = decode(content);
+        int pages = pageCount(content, fileName);
+        String text = decode(content, fileName);
         Map<String, String> values = new HashMap<>();
         Matcher matcher = KV.matcher(text);
         while (matcher.find()) {
@@ -27,7 +31,7 @@ public class FallbackVisionExtractionService implements VisionExtractionService 
             // Never substitute sample shipment values for an unreadable or unsupported upload.
             // The seeded records are for the queue demo only; new uploads need a configured
             // vision provider or a person to enter the document data manually.
-            return new ExtractionResult(List.of(), List.of(), 1, true);
+            return new ExtractionResult(List.of(), List.of(), pages, true);
         }
 
         List<FieldValue> fields = new ArrayList<>();
@@ -35,6 +39,9 @@ public class FallbackVisionExtractionService implements VisionExtractionService 
         add(fields, Enums.FieldKey.importer_name, values, "importer name", "Importer Name", .90f);
         add(fields, Enums.FieldKey.invoice_number, values, "invoice number", "Invoice Number", .88f);
         add(fields, Enums.FieldKey.invoice_date, values, "invoice date", "Invoice Date", .88f);
+        add(fields, Enums.FieldKey.bl_number, values, "bl number", "B/L Number", .88f);
+        add(fields, Enums.FieldKey.port_of_loading, values, "port of loading", "Port of Loading", .88f);
+        add(fields, Enums.FieldKey.port_of_discharge, values, "port of discharge", "Port of Discharge", .88f);
         add(fields, Enums.FieldKey.currency, values, "currency", "Currency", .95f);
         add(fields, Enums.FieldKey.incoterm, values, "incoterm", "Incoterm", .88f);
         add(fields, Enums.FieldKey.total_packages, values, "total packages", "Total Packages", .90f);
@@ -49,11 +56,15 @@ public class FallbackVisionExtractionService implements VisionExtractionService 
             lines.add(new LineValue(1, description, value(values, "hsn code", "hsn"), decimal(values, "quantity"), decimal(values, "unit price"), value(values, "currency"), decimal(values, "line total"), decimal(values, "gross weight kg"), new BigDecimal("0.90")));
         }
         boolean unreadable = fields.isEmpty() && lines.isEmpty();
-        return new ExtractionResult(fields, lines, 1, unreadable);
+        return new ExtractionResult(fields, lines, pages, unreadable);
     }
 
-    private String decode(byte[] content) {
+    private String decode(byte[] content, String fileName) {
         if (content == null || content.length == 0) return "";
+        if (fileName != null && fileName.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+            try (PDDocument pdf = Loader.loadPDF(content)) { return new PDFTextStripper().getText(pdf); }
+            catch (Exception ignored) { return ""; }
+        }
         int mostlyBinary = 0;
         int sample = Math.min(content.length, 512);
         for (int i = 0; i < sample; i++) {
@@ -62,6 +73,12 @@ public class FallbackVisionExtractionService implements VisionExtractionService 
         }
         if (mostlyBinary > sample / 5) return "";
         return new String(content, StandardCharsets.UTF_8);
+    }
+
+    private int pageCount(byte[] content, String fileName) {
+        if (fileName == null || !fileName.toLowerCase(Locale.ROOT).endsWith(".pdf")) return 1;
+        try (PDDocument pdf = Loader.loadPDF(content)) { return Math.max(1, pdf.getNumberOfPages()); }
+        catch (Exception ignored) { return 1; }
     }
 
     private void addField(List<FieldValue> out, Enums.FieldKey key, String label, String value, float confidence) {

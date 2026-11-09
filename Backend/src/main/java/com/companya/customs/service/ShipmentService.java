@@ -1,6 +1,7 @@
 package com.companya.customs.service;
 
 import com.companya.customs.dto.ShipmentDtos.CreateShipmentRequest;
+import com.companya.customs.dto.ShipmentDtos.ShipmentUpdateRequest;
 import com.companya.customs.entity.*;
 import com.companya.customs.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,8 @@ public class ShipmentService {
     private final SupplierRepository suppliers;
     private final ShipmentDocumentRepository documents;
     private final ExtractedFieldRepository fields;
+    private final ShipmentAccessService access;
+    private final AuditService audit;
 
     @Transactional
     public Shipment create(CreateShipmentRequest request, User executive) {
@@ -32,15 +35,24 @@ public class ShipmentService {
                 .importerContactEncrypted(request.importerContact())
                 .supplier(supplier)
                 .assignedExecutive(executive)
-                .status(Enums.ShipmentStatus.EXTRACTING)
+                .status(Enums.ShipmentStatus.DOCUMENTS_PENDING)
                 .build());
 
-        if (request.unreadableDocTypes() != null) {
-            for (Enums.DocumentType type : request.unreadableDocTypes()) {
-                createUnreadablePlaceholder(shipment, type);
-            }
-        }
+        audit.logAction(shipment, null, "Shipment", "SHIPMENT_CREATED", null, shipment.getShipmentCode(), executive, "Shipment created");
         return shipment;
+    }
+
+    @Transactional
+    public Shipment update(Long id, ShipmentUpdateRequest request, User executive) {
+        Shipment shipment = access.requireShipment(id, executive);
+        if (shipment.getStatus() == Enums.ShipmentStatus.PENDING_APPROVAL || shipment.getStatus() == Enums.ShipmentStatus.APPROVED || shipment.getStatus() == Enums.ShipmentStatus.EXPORTED)
+            throw new com.companya.customs.exception.ApiExceptions.Validation("This shipment cannot be edited in its current status");
+        String previous = shipment.getImporterName() + " / " + shipment.getSupplier().getName();
+        shipment.setImporterName(request.importerName().trim());
+        Supplier supplier = suppliers.findByNameIgnoreCase(request.supplierName().trim()).orElseGet(() -> suppliers.save(Supplier.builder().name(request.supplierName().trim()).country(request.supplierCountry() == null || request.supplierCountry().isBlank() ? "Unknown" : request.supplierCountry().trim()).build()));
+        shipment.setSupplier(supplier);
+        audit.logAction(shipment, null, "Shipment details", "SHIPMENT_UPDATED", previous, shipment.getImporterName() + " / " + supplier.getName(), executive, "Shipment details updated");
+        return shipments.save(shipment);
     }
 
     @Transactional
@@ -51,12 +63,11 @@ public class ShipmentService {
     }
 
     private ShipmentDocument createUnreadablePlaceholder(Shipment shipment, Enums.DocumentType type) {
-        ShipmentDocument document = documents.findByShipmentIdAndDocType(shipment.getId(), type)
-                .orElseGet(() -> ShipmentDocument.builder()
+        ShipmentDocument document = ShipmentDocument.builder()
                         .shipment(shipment)
                         .docType(type)
                         .fileName(type.name().toLowerCase() + "-manual-entry.txt")
-                        .build());
+                        .build();
         document.setUnreadable(true);
         document.setHumanVerified(false);
         document.setPageCount(1);
@@ -79,11 +90,9 @@ public class ShipmentService {
     }
 
     private String nextCode() {
-        long next = 24811 + shipments.count();
         String code;
-        do {
-            code = "SHP-" + next++;
-        } while (shipments.findByShipmentCode(code).isPresent());
+        do { code = "SHP-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase(java.util.Locale.ROOT); }
+        while (shipments.findByShipmentCode(code).isPresent());
         return code;
     }
 
@@ -100,6 +109,7 @@ public class ShipmentService {
             );
             case BILL_OF_LADING -> List.of(
                     Enums.FieldKey.exporter_name, Enums.FieldKey.importer_name,
+                    Enums.FieldKey.bl_number, Enums.FieldKey.port_of_loading, Enums.FieldKey.port_of_discharge,
                     Enums.FieldKey.total_packages, Enums.FieldKey.gross_weight_kg, Enums.FieldKey.container_number
             );
         };
@@ -111,6 +121,9 @@ public class ShipmentService {
             case importer_name -> "Importer Name";
             case invoice_number -> "Invoice Number";
             case invoice_date -> "Invoice Date";
+            case bl_number -> "B/L Number";
+            case port_of_loading -> "Port of Loading";
+            case port_of_discharge -> "Port of Discharge";
             case currency -> "Currency";
             case incoterm -> "Incoterm";
             case total_packages -> "Total Packages";

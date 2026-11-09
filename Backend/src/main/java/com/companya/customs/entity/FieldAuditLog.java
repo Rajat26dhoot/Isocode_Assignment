@@ -10,6 +10,9 @@ public class FieldAuditLog {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) private Shipment shipment;
     private Long extractedFieldId;
+    private Long documentId;
+    @Column(length = 128) private String fieldName;
+    @Column(length = 32) @Builder.Default private String actionType = "MANUAL_CORRECTION";
     @Enumerated(EnumType.STRING) private Enums.FieldKey fieldKey;
     @Column(length = 4000) private String oldValue;
     @Column(length = 4000) private String newValue;

@@ -1,21 +1,25 @@
 
 spring:
+  config:
+    import: optional:file:.env[.properties]
+
   application:
     name: customs-document-extraction
 
   datasource:
-    url: jdbc:mysql://${AIVEN_DB_HOST:localhost}:${AIVEN_DB_PORT:3306}/${AIVEN_DB_NAME:customs}?sslMode=REQUIRED&allowPublicKeyRetrieval=true&enabledTLSProtocols=TLSv1.2&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8&connectionTimeZone=UTC
+    url: jdbc:mysql://${AIVEN_DB_HOST:localhost}:${AIVEN_DB_PORT:3306}/${AIVEN_DB_NAME:customs}?${DB_PARAMS:sslMode=REQUIRED&allowPublicKeyRetrieval=true&enabledTLSProtocols=TLSv1.2&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8&connectionTimeZone=UTC}
     username: ${AIVEN_DB_USER:root}
     password: ${AIVEN_DB_PASSWORD:password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
     hikari:
       maximum-pool-size: 5
       minimum-idle: 1
       connection-timeout: 30000
       validation-timeout: 5000
       idle-timeout: 60000
-      max-lifetime: 240000
-      keepalive-time: 30000
-      connection-test-query: SELECT 1
+      max-lifetime: 1500000
+      keepalive-time: 300000
 
   jpa:
     hibernate:
@@ -34,15 +38,37 @@ spring:
 server:
   port: ${PORT:8080}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
 app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
   jwt:
-    secret: ${JWT_SECRET:change-this-secret-to-a-32-byte-minimum-production-secret}
+    secret: ${JWT_SECRET:}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:480}
 
   extraction:
     provider: ${EXTRACTION_PROVIDER:fallback}
+    confidence-threshold: ${EXTRACTION_CONFIDENCE_THRESHOLD:0.85}
 
   openai:
     api-key: ${OPENAI_API_KEY:}
     model: ${OPENAI_VISION_MODEL:gpt-4o-mini}
     endpoint: ${OPENAI_VISION_ENDPOINT:https://api.openai.com/v1/responses}
+
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_VISION_MODEL:gemini-3.5-flash-lite}
+    endpoint: ${GEMINI_VISION_ENDPOINT:https://generativelanguage.googleapis.com}
+    read-timeout-ms: ${GEMINI_READ_TIMEOUT_MS:45000}

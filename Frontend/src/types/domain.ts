@@ -1,9 +1,9 @@
 export type Role = 'ROLE_EXECUTIVE' | 'ROLE_MANAGER'
-export type ShipmentStatus = 'DRAFT' | 'EXTRACTING' | 'NEEDS_REVIEW' | 'READY_FOR_APPROVAL' | 'APPROVED' | 'EXPORTED'
+export type ShipmentStatus = 'DRAFT' | 'DOCUMENTS_PENDING' | 'EXTRACTING' | 'NEEDS_REVIEW' | 'VALIDATION_FAILED' | 'PENDING_APPROVAL' | 'READY_FOR_APPROVAL' | 'APPROVED' | 'REJECTED' | 'EXPORTED'
 export type DocumentType = 'INVOICE' | 'PACKING_LIST' | 'BILL_OF_LADING'
-export type RuleCode = 'INVOICE_TOTAL_VS_LINE_SUM' | 'GROSS_WEIGHT_MISMATCH' | 'NET_WEIGHT_MISMATCH' | 'PACKAGE_COUNT_MISMATCH' | 'PARTY_NAME_MISMATCH'
+export type RuleCode = 'INVOICE_TOTAL_VS_LINE_SUM' | 'LINE_ARITHMETIC' | 'GROSS_WEIGHT_MISMATCH' | 'NET_WEIGHT_MISMATCH' | 'PACKAGE_COUNT_MISMATCH' | 'PARTY_NAME_MISMATCH' | 'CURRENCY_MISMATCH' | 'CONTAINER_MISMATCH' | 'ITEM_OR_QUANTITY_MISMATCH'
 
-export type FieldKey = 'exporter_name' | 'importer_name' | 'invoice_number' | 'invoice_date' | 'currency' | 'incoterm' | 'total_packages' | 'gross_weight_kg' | 'net_weight_kg' | 'container_number' | 'invoice_total'
+export type FieldKey = 'exporter_name' | 'importer_name' | 'invoice_number' | 'invoice_date' | 'bl_number' | 'port_of_loading' | 'port_of_discharge' | 'currency' | 'incoterm' | 'total_packages' | 'gross_weight_kg' | 'net_weight_kg' | 'container_number' | 'invoice_total'
 
 export interface Field {
   id: number
@@ -66,6 +66,7 @@ export interface Shipment {
   updatedAt: string
   documents: ShipmentDocument[]
   discrepancies: Discrepancy[]
+  rejectionReason?: string
 }
 
 export interface SupplierAccuracy {
@@ -79,9 +80,11 @@ export interface SupplierAccuracy {
 export interface AuditLog {
   id: number
   timestamp: string
+  shipment: string
   user: string
   document: DocumentType
   field: string
+  actionType: string
   aiValue: string
   correctedValue: string
   reason: string

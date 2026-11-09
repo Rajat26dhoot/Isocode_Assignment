@@ -1,0 +1,244 @@
+{
+  "info": {
+    "_postman_id": "a1dc9cf2-2c54-4b4b-8c2c-9c6f8a4f0e01",
+    "name": "Customs Operations Backend API",
+    "description": "Complete Postman collection for the Customs Operations Spring Boot API. Set the credential variables before running the login requests. Executive requests use token; manager-only requests use managerToken.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api" },
+    { "key": "healthUrl", "value": "http://localhost:8080" },
+    { "key": "exec_email", "value": "executive@example.com" },
+    { "key": "exec_password", "value": "change-me-executive" },
+    { "key": "manager_email", "value": "manager@example.com" },
+    { "key": "manager_password", "value": "change-me-manager" },
+    { "key": "token", "value": "" },
+    { "key": "managerToken", "value": "" },
+    { "key": "shipmentId", "value": "1" },
+    { "key": "documentId", "value": "1" },
+    { "key": "fieldId", "value": "1" },
+    { "key": "lineItemId", "value": "1" },
+    { "key": "discrepancyId", "value": "1" },
+    { "key": "exportFormat", "value": "csv" }
+  ],
+  "item": [
+    {
+      "name": "00 - Health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{healthUrl}}/actuator/health"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - Authentication",
+      "item": [
+        {
+          "name": "Login - Executive",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Login succeeded', function () { pm.response.to.have.status(200); });", "const body = pm.response.json();", "pm.collectionVariables.set('token', body.token);", "pm.collectionVariables.set('execRole', body.role);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{exec_email}}\",\n  \"password\": \"{{exec_password}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "response": []
+        },
+        {
+          "name": "Login - Manager",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Login succeeded', function () { pm.response.to.have.status(200); });", "const body = pm.response.json();", "pm.collectionVariables.set('managerToken', body.token);", "pm.collectionVariables.set('managerRole', body.role);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{manager_email}}\",\n  \"password\": \"{{manager_password}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout - Executive token",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/auth/logout" },
+          "response": []
+        },
+        {
+          "name": "Logout - Manager token",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/auth/logout" },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Executive shipment workflow",
+      "item": [
+        {
+          "name": "List shipments",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/shipments" },
+          "response": []
+        },
+        {
+          "name": "Create shipment",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Shipment created', function () { pm.response.to.have.status(200); });", "const body = pm.response.json();", "if (body.id) pm.collectionVariables.set('shipmentId', body.id);", "if (body.documents && body.documents.length) pm.collectionVariables.set('documentId', body.documents[0].id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"importerName\": \"Acme Imports Ltd\",\n  \"supplierName\": \"Global Parts Supplier\",\n  \"supplierCountry\": \"IN\",\n  \"importerContact\": \"ops@acme.example\",\n  \"unreadableDocTypes\": []\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shipments"
+          },
+          "response": []
+        },
+        {
+          "name": "Get shipment",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/shipments/{{shipmentId}}" },
+          "response": []
+        },
+        {
+          "name": "Update shipment",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"importerName\": \"Acme Imports Ltd\",\n  \"supplierName\": \"Global Parts Supplier Updated\",\n  \"supplierCountry\": \"IN\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shipments/{{shipmentId}}"
+          },
+          "response": []
+        },
+        {
+          "name": "Extract document (select a file)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Extraction request accepted', function () { pm.expect(pm.response.code).to.be.oneOf([200, 202]); });", "try { const body = pm.response.json(); const doc = (body.documents || []).find(d => d.docType === 'INVOICE') || (body.documents || [])[0]; if (doc) pm.collectionVariables.set('documentId', doc.id); } catch (e) {}"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": { "mode": "formdata", "formdata": [
+              { "key": "docType", "value": "INVOICE", "type": "text" },
+              { "key": "file", "type": "file", "src": null, "description": "Choose a PDF, JPG, or PNG file in Postman" }
+            ] },
+            "url": "{{baseUrl}}/shipments/{{shipmentId}}/documents/extract"
+          },
+          "response": []
+        },
+        {
+          "name": "Retry document extraction",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/shipments/documents/{{documentId}}/retry" },
+          "response": []
+        },
+        {
+          "name": "Create unreadable document placeholder",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["try { const body = pm.response.json(); const doc = (body.documents || []).find(d => d.docType === 'PACKING_LIST') || (body.documents || [])[0]; if (doc) pm.collectionVariables.set('documentId', doc.id); } catch (e) {}"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/shipments/{{shipmentId}}/documents/unreadable?docType=PACKING_LIST" },
+          "response": []
+        },
+        {
+          "name": "Get document content",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/shipments/documents/{{documentId}}/content" },
+          "response": []
+        },
+        {
+          "name": "Edit extracted field",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"currentValue\": \"Acme Imports Ltd\",\n  \"changeReason\": \"Corrected against the source document\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shipments/fields/{{fieldId}}"
+          },
+          "response": []
+        },
+        {
+          "name": "Create invoice line item",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 200) { const body = pm.response.json(); if (body.id) pm.collectionVariables.set('lineItemId', body.id); }"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Industrial component\",\n  \"hsnCode\": \"847190\",\n  \"quantity\": 10,\n  \"unitPrice\": 125.50,\n  \"currency\": \"USD\",\n  \"lineTotal\": 1255.00\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shipments/documents/{{documentId}}/line-items"
+          },
+          "response": []
+        },
+        {
+          "name": "Edit line item",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Industrial component - corrected\",\n  \"hsnCode\": \"847190\",\n  \"quantity\": 10,\n  \"unitPrice\": 125.50,\n  \"currency\": \"USD\",\n  \"lineTotal\": 1255.00,\n  \"grossWeightKg\": 25.5\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shipments/line-items/{{lineItemId}}"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify document",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/shipments/documents/{{documentId}}/verify" },
+          "response": []
+        },
+        {
+          "name": "Mark document unreadable",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/shipments/documents/{{documentId}}/unreadable" },
+          "response": []
+        },
+        {
+          "name": "Run cross-check",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/shipments/{{shipmentId}}/cross-check" },
+          "response": []
+        },
+        {
+          "name": "Resolve discrepancy",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"resolutionNote\": \"Reviewed and corrected against the source documents\",\n  \"managerOverride\": false\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shipments/discrepancies/{{discrepancyId}}"
+          },
+          "response": []
+        },
+        {
+          "name": "Submit shipment for approval",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/shipments/{{shipmentId}}/submit" },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Manager workflow and reports",
+      "item": [
+        {
+          "name": "Get submitted shipment - Manager",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/shipments/{{shipmentId}}" },
+          "response": []
+        },
+        {
+          "name": "Approve shipment",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/shipments/{{shipmentId}}/approve" },
+          "response": []
+        },
+        {
+          "name": "Reject shipment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Supporting documentation requires correction\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": "{{baseUrl}}/shipments/{{shipmentId}}/reject"
+          },
+          "response": []
+        },
+        {
+          "name": "Supplier accuracy report",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/reports/supplier-accuracy" },
+          "response": []
+        },
+        {
+          "name": "Audit logs report",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/reports/audit-logs" },
+          "response": []
+        },
+        {
+          "name": "Export shipment",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{managerToken}}" }], "url": "{{baseUrl}}/shipments/{{shipmentId}}/export?format={{exportFormat}}" },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

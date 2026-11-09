@@ -11,6 +11,7 @@ public class ShipmentDocument {
     @Enumerated(EnumType.STRING) @Column(nullable = false) private Enums.DocumentType docType;
     @Column(nullable = false) private String fileName;
     private String fileUrl;
+    @Convert(converter = com.companya.customs.service.EncryptedDocumentBytesConverter.class)
     @Lob @Column(columnDefinition = "LONGBLOB") private byte[] fileContent;
     private String contentType;
     private Integer pageCount;

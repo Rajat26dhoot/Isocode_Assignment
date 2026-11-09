@@ -26,6 +26,10 @@ export function NewShipmentPage() {
 
   const choose = (type: DocumentType, file?: File) => {
     if (!file) return
+    const allowed = /\.(pdf|jpg|jpeg|png)$/i.test(file.name)
+    if (!allowed) { setError('Choose a PDF, JPG, or PNG document.'); return }
+    if (file.size > 25 * 1024 * 1024) { setError('Files must be 25 MB or smaller.'); return }
+    setError('')
     setFiles(current => ({ ...current, [type]: file }))
     setUnreadable(current => {
       const next = { ...current }
@@ -39,7 +43,7 @@ export function NewShipmentPage() {
     choose(type, event.dataTransfer.files[0])
   }
 
-  const ready = slots.every(slot => Boolean(files[slot.type] || unreadable[slot.type])) && Boolean(importerName.trim() && supplierName.trim())
+  const ready = Boolean(importerName.trim() && supplierName.trim())
 
   const begin = async () => {
     setSubmitting(true)
@@ -57,7 +61,7 @@ export function NewShipmentPage() {
   return (
     <div className="mx-auto max-w-[1160px]">
       <div className="mb-7 flex items-end justify-between">
-        <SectionTitle eyebrow="Create shipment" title="Start a document packet" description="Upload the three source documents to begin AI extraction and reconciliation." />
+        <SectionTitle eyebrow="Create shipment" title="Start a document packet" description="Create the shipment and upload any source documents available now. Missing documents can be added during review." />
         <div className="flex items-center gap-2">
           <Badge tone="blue" dot>AI extraction ready</Badge>
           <span className="text-xs text-slate-400">PDF, JPG, PNG · max 25 MB</span>
@@ -86,7 +90,7 @@ export function NewShipmentPage() {
                 ref={element => { inputRefs.current[slot.type] = element }}
                 onChange={event => choose(slot.type, event.target.files?.[0])}
                 type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.txt"
+                accept=".pdf,.png,.jpg,.jpeg"
                 className="hidden"
               />
               <div className="flex items-start justify-between">
@@ -136,11 +140,11 @@ export function NewShipmentPage() {
         <div className="mt-7 flex items-center justify-between border-t border-slate-200 pt-5">
           <div>
             <div className="text-xs font-semibold text-slate-700">{Object.keys(files).length + Object.keys(unreadable).length} of 3 document slots ready</div>
-            <div className="mt-1 text-xs text-slate-400">You can add missing documents from the review workspace.</div>
+          <div className="mt-1 text-xs text-slate-400">Documents are optional at creation and remain pending until uploaded.</div>
             {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
           </div>
           <Button variant="primary" disabled={!ready || submitting} onClick={() => void begin()} icon={<ArrowRight size={15} />}>
-            {submitting ? 'Creating…' : 'Begin AI extraction'}
+            {submitting ? 'Creating…' : 'Create shipment'}
           </Button>
         </div>
       </Card>

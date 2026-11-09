@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
 
 @RestController @RequestMapping("/api/auth") @RequiredArgsConstructor
 public class AuthController {
@@ -19,4 +20,5 @@ public class AuthController {
                 .orElseThrow(() -> new ApiExceptions.Validation("Invalid email or password"));
         return new LoginResponse(jwt.generate(user.getEmail(), user.getRole().name()), user.getEmail(), user.getRole().name(), user.getFullName());
     }
+    @PostMapping("/logout") public ResponseEntity<Void> logout(@RequestHeader(value = "Authorization", required = false) String authorization) { if (authorization != null && authorization.startsWith("Bearer ")) jwt.revoke(authorization.substring(7)); return ResponseEntity.noContent().build(); }
 }

@@ -12,6 +12,7 @@ interface AppContextValue {
   setRole: (role: Role) => void
   authenticated: boolean
   signIn: (email: string, password: string) => Promise<void>
+  signOut: () => void
   userName: string
   shipments: Shipment[]
   suppliers: SupplierAccuracy[]
@@ -21,10 +22,15 @@ interface AppContextValue {
   apiError: string | null
   pendingPackets: Record<number, PendingPacket>
   confirmField: (shipmentId: number, fieldId: number, value?: string) => Promise<void>
+  saveLineItem: (shipmentId: number, itemId: number, values: { description: string; hsnCode: string; quantity: number; unitPrice: number; currency: string; lineTotal: number }) => Promise<void>
+  createLineItem: (shipmentId: number, documentId: number, values: { description: string; hsnCode: string; quantity: number; unitPrice: number; currency: string; lineTotal: number }) => Promise<void>
   markDocumentUnreadable: (shipmentId: number, documentId: number) => Promise<void>
   verifyDocument: (shipmentId: number, documentId: number) => Promise<void>
+  retryExtraction: (shipmentId: number, documentId: number) => Promise<void>
   resolveDiscrepancy: (shipmentId: number, discrepancyId: number, note?: string) => Promise<void>
   approveShipment: (shipmentId: number) => Promise<void>
+  submitShipment: (shipmentId: number) => Promise<void>
+  rejectShipment: (shipmentId: number, reason: string) => Promise<void>
   refreshShipment: (shipmentId: number) => Promise<void>
   refreshAll: () => Promise<void>
   createShipment: (files: Partial<Record<DocumentType, File>>, unreadable: Partial<Record<DocumentType, boolean>>, details: { importerName: string; supplierName: string; supplierCountry?: string; importerContact?: string }) => Promise<number>
@@ -80,11 +86,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async (forRole: Role = role) => {
     const [remoteShipments, remoteSuppliers, remoteAudit] = await Promise.all([
       api.getShipments(),
-      api.getAccuracy(),
-      api.getAuditLogs().catch(() => []),
+      forRole === 'ROLE_MANAGER' ? api.getAccuracy() : Promise.resolve([]),
+      forRole === 'ROLE_MANAGER' ? api.getAuditLogs().catch(() => []) : Promise.resolve([]),
     ])
     const detailed = await Promise.all(remoteShipments.map(async summary => {
       try {
@@ -96,7 +102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setShipments(detailed)
     setSuppliers(normalizeAccuracy(remoteSuppliers))
     setAuditLogs(mapAuditLogs(remoteAudit))
-  }, [liveApi])
+  }, [liveApi, role])
 
   const signIn = useCallback(async (email: string, password: string) => {
     setLoading(true)
@@ -106,7 +112,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAuthenticated(true)
       setRoleState(login.role)
       setUserName(login.fullName || login.email)
-      await refreshAll()
+      await refreshAll(login.role)
     } catch (error) {
       api.setToken(null)
       setAuthenticated(false)
@@ -119,6 +125,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
   }, [refreshAll])
+
+  const signOut = () => { api.logout(); setAuthenticated(false); setRoleState('ROLE_EXECUTIVE'); setUserName(''); setShipments([]); setSuppliers([]); setAuditLogs([]); setApiError(null) }
 
   useEffect(() => {
     if (!api.hasToken()) { setLoading(false); return }
@@ -159,9 +167,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const remoteAudit = await api.getAuditLogs().catch(() => [])
       setAuditLogs(mapAuditLogs(remoteAudit))
       setSuppliers(normalizeAccuracy(await api.getAccuracy()))
-    } catch {
-      /* keep optimistic UI */
+    } catch (error) {
+      await refreshShipment(shipmentId)
+      throw error
     }
+  }
+
+  const saveLineItem = async (shipmentId: number, itemId: number, values: { description: string; hsnCode: string; quantity: number; unitPrice: number; currency: string; lineTotal: number }) => {
+    await api.editLineItem(itemId, values)
+    await refreshShipment(shipmentId)
+  }
+  const createLineItem = async (shipmentId: number, documentId: number, values: { description: string; hsnCode: string; quantity: number; unitPrice: number; currency: string; lineTotal: number }) => {
+    await api.createLineItem(documentId, values)
+    await refreshShipment(shipmentId)
   }
 
   const markDocumentUnreadable = async (shipmentId: number, documentId: number) => {
@@ -177,8 +195,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }))
     try {
       upsertShipment(await api.markUnreadable(documentId))
-    } catch {
-      /* keep optimistic UI */
+    } catch (error) {
+      await refreshShipment(shipmentId)
+      throw error
     }
   }
 
@@ -189,10 +208,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }))
     try {
       upsertShipment(await api.verifyDocument(documentId))
-    } catch {
-      /* keep optimistic UI */
+    } catch (error) {
+      await refreshShipment(shipmentId)
+      throw error
     }
   }
+
+  const retryExtraction = async (shipmentId: number, documentId: number) => { upsertShipment(await api.retryExtraction(documentId)); await refreshShipment(shipmentId) }
 
   const resolveDiscrepancy = async (shipmentId: number, discrepancyId: number, note = 'Reviewed and resolved by documentation executive') => {
     setShipments(current => current.map(shipment => shipment.id !== shipmentId ? shipment : {
@@ -205,35 +227,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }))
     try {
       upsertShipment(await api.resolveDiscrepancy(discrepancyId, note, role === 'ROLE_MANAGER'))
-    } catch {
-      /* keep optimistic UI */
+    } catch (error) {
+      await refreshShipment(shipmentId)
+      throw error
     }
   }
 
   const approveShipment = async (shipmentId: number) => {
-    setShipments(current => current.map(shipment => shipment.id !== shipmentId ? shipment : { ...shipment, status: 'APPROVED' }))
-    try {
-      upsertShipment(await api.approve(shipmentId))
-    } catch (error) {
-      setApiError(error instanceof Error ? error.message : 'Approval failed')
-      await refreshShipment(shipmentId)
-    }
+    upsertShipment(await api.approve(shipmentId))
   }
 
+  const submitShipment = async (shipmentId: number) => { upsertShipment(await api.submit(shipmentId)) }
+  const rejectShipment = async (shipmentId: number, reason: string) => { upsertShipment(await api.reject(shipmentId, reason)) }
+
   const createShipment = async (files: Partial<Record<DocumentType, File>>, unreadable: Partial<Record<DocumentType, boolean>>, details: { importerName: string; supplierName: string; supplierCountry?: string; importerContact?: string }) => {
-    const unreadableDocTypes = (Object.keys(unreadable) as DocumentType[]).filter(type => unreadable[type])
-    const created = normalizeShipment(await api.createShipment({
-      ...details,
-      unreadableDocTypes,
-    }))
+    const created = normalizeShipment(await api.createShipment(details))
+    upsertShipment(created)
     let processed = created
+    const failures: string[] = []
     for (const docType of ['INVOICE', 'PACKING_LIST', 'BILL_OF_LADING'] as DocumentType[]) {
       const file = files[docType]
-      if (file) processed = normalizeShipment(await api.extractDocument(created.id, docType, file))
-      else if (unreadable[docType]) processed = normalizeShipment(await api.createUnreadableDocument(created.id, docType))
+      try {
+        if (file) processed = normalizeShipment(await api.extractDocument(created.id, docType, file))
+        else if (unreadable[docType]) processed = normalizeShipment(await api.createUnreadableDocument(created.id, docType))
+      } catch (error) { failures.push(`${docType}: ${error instanceof Error ? error.message : 'upload failed'}`) }
     }
-    processed = normalizeShipment(await api.runCrossCheck(created.id))
+    try { processed = normalizeShipment(await api.runCrossCheck(created.id)) }
+    catch (error) { failures.push(`Validation: ${error instanceof Error ? error.message : 'could not run'}`) }
     upsertShipment(processed)
+    if (failures.length) setApiError(`Shipment created. Some documents need attention: ${failures.join('; ')}`)
     return created.id
   }
 
@@ -254,6 +276,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setRole,
     authenticated,
     signIn,
+    signOut,
     userName,
     shipments,
     suppliers,
@@ -263,10 +286,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     apiError,
     pendingPackets,
     confirmField,
+    saveLineItem,
+    createLineItem,
     markDocumentUnreadable,
     verifyDocument,
+    retryExtraction,
     resolveDiscrepancy,
     approveShipment,
+    submitShipment,
+    rejectShipment,
     refreshShipment,
     refreshAll,
     createShipment,

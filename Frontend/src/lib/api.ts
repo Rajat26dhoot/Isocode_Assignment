@@ -18,7 +18,7 @@ export interface CreateShipmentPayload {
 }
 
 class ApiClient {
-  private token = localStorage.getItem('customs.jwt')
+  private token = sessionStorage.getItem('customs.jwt')
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = {
@@ -31,7 +31,9 @@ class ApiClient {
     const response = await fetch(`${API_URL}${path}`, { ...init, headers })
     if (!response.ok) {
       const text = await response.text()
-      throw new Error(text || `Request failed (${response.status})`)
+      let message = text || `Request failed (${response.status})`
+      try { message = JSON.parse(text).message || message } catch { /* response is plain text */ }
+      throw new Error(message)
     }
     if (response.status === 204) return undefined as T
     const contentType = response.headers.get('content-type') ?? ''
@@ -41,21 +43,21 @@ class ApiClient {
 
   setToken(token: string | null) {
     this.token = token
-    if (token) localStorage.setItem('customs.jwt', token)
+    if (token) sessionStorage.setItem('customs.jwt', token)
     else {
-      localStorage.removeItem('customs.jwt')
+      sessionStorage.removeItem('customs.jwt')
       localStorage.removeItem('customs.role')
       localStorage.removeItem('customs.user')
     }
   }
 
   setSessionIdentity(role: Role, fullName: string) {
-    localStorage.setItem('customs.role', role)
-    localStorage.setItem('customs.user', fullName)
+    sessionStorage.setItem('customs.role', role)
+    sessionStorage.setItem('customs.user', fullName)
   }
 
-  getRole(): Role { return (localStorage.getItem('customs.role') as Role | null) ?? 'ROLE_EXECUTIVE' }
-  getUserName() { return localStorage.getItem('customs.user') ?? '' }
+  getRole(): Role { return (sessionStorage.getItem('customs.role') as Role | null) ?? 'ROLE_EXECUTIVE' }
+  getUserName() { return sessionStorage.getItem('customs.user') ?? '' }
 
   hasToken() {
     return Boolean(this.token)
@@ -70,6 +72,8 @@ class ApiClient {
     this.setSessionIdentity(result.role, result.fullName)
     return result
   }
+
+  logout() { const token = this.token; this.setToken(null); if (token) void fetch(`${API_URL}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => undefined) }
 
   getShipments() {
     return this.request<Shipment[]>('/shipments')
@@ -101,6 +105,7 @@ class ApiClient {
       body: form,
     })
   }
+  retryExtraction(documentId: number) { return this.request<Shipment>(`/shipments/documents/${documentId}/retry`, { method: 'POST' }) }
 
   createUnreadableDocument(shipmentId: number, docType: DocumentType) {
     return this.request<Shipment>(`/shipments/${shipmentId}/documents/unreadable?docType=${docType}`, {
@@ -113,6 +118,13 @@ class ApiClient {
       method: 'PATCH',
       body: JSON.stringify({ currentValue, changeReason }),
     })
+  }
+
+  editLineItem(id: number, update: { description: string; hsnCode: string; quantity: number; unitPrice: number; currency: string; lineTotal: number }) {
+    return this.request(`/shipments/line-items/${id}`, { method: 'PATCH', body: JSON.stringify(update) })
+  }
+  createLineItem(documentId: number, item: { description: string; hsnCode: string; quantity: number; unitPrice: number; currency: string; lineTotal: number }) {
+    return this.request(`/shipments/documents/${documentId}/line-items`, { method: 'POST', body: JSON.stringify(item) })
   }
 
   markUnreadable(documentId: number) {
@@ -138,6 +150,9 @@ class ApiClient {
     return this.request<Shipment>(`/shipments/${id}/approve`, { method: 'POST' })
   }
 
+  submit(id: number) { return this.request<Shipment>(`/shipments/${id}/submit`, { method: 'POST' }) }
+  reject(id: number, reason: string) { return this.request<Shipment>(`/shipments/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }) }
+
   getAccuracy() {
     return this.request<SupplierAccuracy[]>('/reports/supplier-accuracy')
   }
@@ -146,9 +161,11 @@ class ApiClient {
     return this.request<Array<{
       id: number
       timestamp: string
+      shipment: string
       user: string
       document: DocumentType | string
       field: string
+      actionType: string
       aiValue: string
       correctedValue: string
       reason: string
@@ -170,9 +187,11 @@ export function mapAuditLogs(raw: Awaited<ReturnType<ApiClient['getAuditLogs']>>
   return raw.map(item => ({
     id: item.id,
     timestamp: formatTimestamp(item.timestamp),
+    shipment: item.shipment,
     user: item.user,
     document: (item.document as DocumentType) || 'INVOICE',
     field: humanizeField(item.field),
+    actionType: item.actionType,
     aiValue: item.aiValue ?? '',
     correctedValue: item.correctedValue ?? '',
     reason: item.reason,
